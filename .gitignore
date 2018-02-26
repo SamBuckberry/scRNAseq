@@ -1,0 +1,12 @@
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+datasets/filtered_gene_bc_matrices/hg19.premrna/barcodes.tsv
+datasets/filtered_gene_bc_matrices/hg19.premrna/genes.tsv
+datasets/filtered_gene_bc_matrices/hg19.premrna/matrix.mtx
+datasets/filtered_gene_bc_matrices/hg19/barcodes.tsv
+datasets/filtered_gene_bc_matrices/hg19/genes.tsv
+datasets/filtered_gene_bc_matrices/hg19/barcodes.tsv
+datasets/filtered_gene_bc_matrices/hg19/matrix.mtx
+datasets/pbmc3k_filtered_gene_bc_matrices.tar.gz
