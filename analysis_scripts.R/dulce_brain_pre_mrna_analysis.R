@@ -2,6 +2,7 @@ library(devtools)
 library(Seurat)
 library(dplyr)
 library(Matrix)
+library(magrittr)
 
 # read the 10X data
 dat <- Read10X(data.dir = "datasets/filtered_gene_bc_matrices/hg19.premrna/")
@@ -105,5 +106,226 @@ s_dat <- FindVariableGenes(object = s_dat,
                           mean.function = ExpMean,
                           dispersion.function = LogVMR, do.text=FALSE)
 
+# vector of variable genes
+head(s_dat@var.genes)
+
+length(s_dat@var.genes)
+
+# mean and variance of genes are stored pbmc@hvg.info
+head(s_dat@hvg.info)
 
 
+
+# slot is empty before running ScaleData()
+s_dat@scale.data
+
+
+# build linear model using nUMI and percent.mito
+s_dat <- ScaleData(object = s_dat,
+                  vars.to.regress = c("nUMI", "percent.mito"))
+
+class(s_dat@scale.data)
+s_dat@scale.data[1:6, 1:6]
+
+
+s_dat <- RunPCA(object = s_dat,
+               pc.genes = s_dat@var.genes,
+               do.print = TRUE,
+               pcs.print = 1:5,
+               genes.print = 5)
+
+PrintPCAParams(s_dat)
+
+PrintPCA(object = s_dat, pcs.print = 1:2,
+         genes.print = 5, use.full = FALSE)
+
+# visualise top genes associated with principal components
+VizPCA(object = s_dat, pcs.use = 1:2)
+
+PCAPlot(object = s_dat, dim.1 = 1, dim.2 = 2)
+
+
+# the results of the projected PCA can be explored by setting use.full=TRUE in the functions above
+s_dat <- ProjectPCA(object = s_dat, do.print = FALSE)
+
+# 500 cells
+PCHeatmap(object = s_dat,
+          pc.use = 1,
+          cells.use = 500,
+          do.balanced = TRUE,
+          label.columns = FALSE)
+
+# All cells
+PCHeatmap(object = s_dat,
+          pc.use = 1,
+          do.balanced = TRUE,
+          label.columns = FALSE)
+
+# Determine number of PC's to use
+
+# NOTE: This process can take a long time for big datasets, comment out for expediency.
+# More approximate techniques such as those implemented in PCElbowPlot() can be used to reduce computation time
+system.time(
+  s_dat <- JackStraw(object = s_dat,
+                    num.replicate = 100,
+                    do.print = FALSE)
+)
+
+JackStrawPlot(object = s_dat, PCs = 1:15)
+
+PCElbowPlot(object = s_dat)
+
+
+s_dat <- FindClusters(object = s_dat,
+                     reduction.type = "pca",
+                     dims.use = 1:8,
+                     resolution = 0.6,
+                     print.output = 0,
+                     save.SNN = TRUE)
+
+# use PrintFindClustersParams() to print summary
+# of parameters used to FindClusters()
+PrintFindClustersParams(object = s_dat)
+
+
+s_dat <- RunTSNE(object = s_dat,
+                dims.use = 1:8,
+                do.fast = TRUE)
+
+TSNEPlot(object = s_dat, do.label = TRUE)
+
+
+### Find markers of clusters
+
+# find all markers of cluster 1
+cluster1.markers <- FindMarkers(object = s_dat,
+                                ident.1 = 1,
+                                min.pct = 0.25)
+
+head(cluster1.markers)
+
+# find all markers distinguishing cluster 5 from clusters 2 and 4
+cluster5.markers <- FindMarkers(object = s_dat,
+                                ident.1 = 5,
+                                ident.2 = c(2,4),
+                                min.pct = 0.25)
+head(cluster5.markers)
+
+
+# find markers for every cluster compared to all remaining cells, report only the positive ones
+s_dat.markers <- FindAllMarkers(object = s_dat,
+                               only.pos = TRUE,
+                               min.pct = 0.25,
+                               thresh.use = 0.25)
+
+head(s_dat.markers)
+
+
+### Or the top 2 genes for each cluster
+
+s_dat.markers %>% group_by(cluster) %>% top_n(2, avg_diff)
+
+## Stats tests
+levels(s_dat@ident)
+table(s_dat@ident)
+
+my_bimod <- FindMarkers(object = s_dat,
+                        ident.1 = 1,
+                        thresh.use = 0.25,
+                        test.use = "bimod",
+                        only.pos = TRUE)
+
+my_roc <- FindMarkers(object = s_dat,
+                      ident.1 = 1,
+                      thresh.use = 0.25,
+                      test.use = "roc",
+                      only.pos = TRUE)
+
+my_t <- FindMarkers(object = s_dat,
+                    ident.1 = 1,
+                    thresh.use = 0.25,
+                    test.use = "t",
+                    only.pos = TRUE)
+
+my_tobit <- FindMarkers(object = s_dat,
+                        ident.1 = 1,
+                        thresh.use = 0.25,
+                        test.use = "tobit",
+                        only.pos = TRUE)
+
+
+# identical set of genes
+dim(my_bimod)
+dim(my_roc)
+dim(my_t)
+dim(my_tobit)
+
+
+my_gene <- row.names(my_bimod)
+a <- 1:length(my_gene)
+b <- match(my_gene, row.names(my_roc))
+c <- match(my_gene, row.names(my_t))
+d <- match(my_gene, row.names(my_tobit))
+
+
+# bimod vs. bimod
+cor(a, a, method = "spearman")
+
+# bimod vs. roc
+cor(a, b, method = "spearman")
+
+# bimod vs. t
+cor(a, c, method = "spearman")
+
+# bimod vs. tobit
+cor(a, d, method = "spearman")
+
+par(mfrow=c(2,2))
+barplot(a, main = 'bimod')
+barplot(b, main = 'roc')
+barplot(c, main = 't')
+barplot(d, main = 'tobit')
+
+
+
+# Visualise some markers
+
+VlnPlot(object = s_dat, features.plot = c("PLP1", "ST18"))
+
+
+# And with raw UMI counts
+
+# you can plot raw UMI counts as well
+VlnPlot(object = s_dat,
+        features.plot = c("FGF13", "RELN"),
+        use.raw = TRUE,
+        y.log = TRUE)
+
+## And the tSNE with marker gene expression
+FeaturePlot(object = s_dat,
+            features.plot = c("PLP1", "ST18", "FGF13", "RELN", "LHFPL3", "PCDH15", "NXPH1", "GRIK1", "CBLN2"),
+            cols.use = c("grey", "blue"),
+            reduction.use = "tsne")
+
+FeaturePlot(object = s_dat,
+            features.plot = head(row.names(my_tobit), 9),
+            cols.use = c("grey", "blue"))
+
+
+
+## Heatmaps
+head(s_dat.markers)
+
+
+s_dat.markers %>%
+  group_by(cluster) %>%
+  top_n(10, avg_diff) -> top10
+
+head(top10)
+
+
+DoHeatmap(object = s_dat,
+          genes.use = top10$gene,
+          order.by.ident = TRUE,
+          slim.col.label = TRUE,
+          remove.key = TRUE)
