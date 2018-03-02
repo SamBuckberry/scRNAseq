@@ -3,6 +3,8 @@ library(Seurat)
 library(dplyr)
 library(Matrix)
 library(magrittr)
+library(reshape2)
+library(stringr)
 
 # read the 10X data
 dat <- Read10X(data.dir = "datasets/filtered_gene_bc_matrices/hg19.premrna/")
@@ -329,3 +331,105 @@ DoHeatmap(object = s_dat,
           order.by.ident = TRUE,
           slim.col.label = TRUE,
           remove.key = TRUE)
+
+
+###### Make barplot of marker genes
+
+## Get top 2 markers
+top_markers <- s_dat.markers %>% group_by(cluster) %>% top_n(1, avg_diff)
+
+markers <- top_markers$gene
+object <- s_dat
+
+
+dim(object@raw.data)
+dim(object@data)
+
+barplot_markers <- function(object, markers, y_text_size=8){
+
+  
+  # Check if there are replicate marker ids
+  stopifnot(all(unique(markers) == markers))
+  
+  # Get the ID's of the cells to include after filtering
+  cell_include <- colnames(object@data)
+  
+  ## Get the raw UMI data
+  dat <- object@raw.data[rownames(object@raw.data) %in% markers, ] %>%
+    as.matrix() %>% t() %>% data.frame()
+  dat <- dat[rownames(dat) %in% cell_include, ]
+  
+  stopifnot(all(rownames(dat) == names(object@ident)))
+  
+  # Add the cluster information
+  stopifnot(length(object@ident) == nrow(dat))
+  dat$cluster <- as.numeric(object@ident)
+  
+  # Reorder by cluster
+  dat <- dat[order(dat$cluster), ]
+  dat$cell <- dat$cell <- 1:nrow(dat)
+
+  dat <- melt(dat, id.vars = c("cluster", "cell"))
+  
+  #dat$variable <- str_replace(dat$variable, pattern = "-", replacement = "_")
+  #marker_correct <- str_replace(markers, pattern = "-", replacement = "_")
+  
+  dat$variable <- factor(x = dat$variable, levels=markers)
+
+  ggplot(data = dat, aes(x = cell, y = value+0.1, fill=factor(cluster))) +
+    geom_col() +
+    facet_grid(variable~., scales = "free_y") +
+    ylab(label = "UMI count") +
+    labs(x = "", fill = "Cluster") +
+    theme(strip.text.y = element_text(angle = 0, hjust = 0),
+          strip.background = element_blank(),
+          axis.text.x = element_blank(),
+          axis.ticks.x = element_blank(),
+          axis.title.x = element_blank(),
+          axis.text.y = element_text(size = y_text_size))
+  
+  
+}
+
+barplot_markers(object = s_dat, markers =c("NXPH1", "PLP1", "TSHZ2"))
+
+
+library(pheatmap)
+heatmap_cells <- function(object){
+
+  # Get variable gene IDs  
+  var_genes <- object@var.genes
+  
+  # Get the ID's of the cells to include after filtering
+  cell_include <- colnames(object@data)
+
+  # Get UMI data for variable genes
+  dat <- object@raw.data[rownames(object@raw.data) %in% var_genes, ] %>%
+    as.matrix() %>% t() %>% data.frame()
+  dat <- dat[rownames(dat) %in% cell_include, ]
+  
+  # Add the cluster information
+  stopifnot(all(names(object@ident) == rownames(dat)))
+  cluster <- as.numeric(object@ident)
+  ord <- order(cluster)
+  
+  # Reorder by cluster
+  dat <- dat[ord, ]
+  
+  pheatmap(as.matrix(dat), cluster_rows = FALSE, cluster_cols = FALSE,
+           show_rownames = FALSE, show_colnames = FALSE)
+  
+  
+  
+}
+
+
+
+
+
+
+qplot(test$cell, test$value, colour=factor(test$cluster),
+      geom = 'bar', stat = 'identity')
+
+  facet_grid(variable~., space = "free_y")
+gg_bar
